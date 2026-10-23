@@ -55,6 +55,16 @@ li{margin:7px 0;overflow-wrap:anywhere}
 <p id="total" class="muted">0 results recorded</p>
 </div>
 <div class="panel">
+<h3>3-Level analysis (historical candidates)</h3>
+<p class="muted">Each level shows one distinct number ranked by prior frequency, plus its Big/Small label. These are historical candidates, not reliable future predictions.</p>
+<div class="cards">
+<div class="card"><small>Level 1 · top frequency</small><div class="big" id="l1num">—</div><small id="l1bs">Waiting for data</small></div>
+<div class="card"><small>Level 2 · next candidate</small><div class="big" id="l2num">—</div><small id="l2bs">Waiting for data</small></div>
+<div class="card"><small>Level 3 · next candidate</small><div class="big" id="l3num">—</div><small id="l3bs">Waiting for data</small></div>
+</div>
+<p id="levelNote" class="muted" style="margin-top:12px">Add completed results to calculate historical candidates.</p>
+</div>
+<div class="panel">
 <h3>Walk-forward test (three candidates)</h3>
 <p class="muted">For each test round, candidates are chosen only from earlier results. This is a historical test, not a future prediction.</p>
 <div class="cards">
@@ -87,6 +97,13 @@ async function refresh(){
  const d=await api('/api/dashboard');
  document.getElementById('freq').innerHTML=d.frequency.map(x=>`<div class="tile"><b>${x.number}</b><small>${x.count} times</small><br><small>${x.percent}%</small></div>`).join('');
  document.getElementById('total').textContent=`${d.total} results recorded`;
+ const levels=d.levels||[];
+ for(let k=1;k<=3;k++){
+   const item=levels[k-1];
+   document.getElementById('l'+k+'num').textContent=item?String(item.number):'—';
+   document.getElementById('l'+k+'bs').textContent=item?(item.big_small+' · '+item.count+' historical hit(s)'):'Waiting for data';
+ }
+ document.getElementById('levelNote').textContent=d.total?`Based on ${d.total} saved result(s). Frequency ranking only; it does not improve or guarantee the next result.`:'Add completed results to calculate historical candidates.';
  for(let k=1;k<=3;k++){document.getElementById('h'+k).textContent=d.backtest.total?d.backtest['top'+k+'_pct']+'%':'—';document.getElementById('h'+k+'n').textContent=d.backtest.total?`${d.backtest['top'+k+'_hits']}/${d.backtest.total} rounds`:''}
  document.getElementById('backtest').textContent=d.backtest.total?`Test rounds: ${d.backtest.total}. Small samples can be misleading; compare against a suitable random baseline.`:'Add at least 6 completed results to begin the walk-forward test.';
  document.getElementById('history').innerHTML=d.recent.length?d.recent.map(x=>`<li>${esc(x.period_id)} — <b>${x.number}</b> (${x.number>=5?'Big':'Small'}) <small>${esc(x.created_at)}</small></li>`).join(''):'<li>No results yet.</li>';
@@ -142,7 +159,12 @@ def build_dashboard():
     for k in range(3):
         bt[f"top{k+1}_hits"] = hits[k]
         bt[f"top{k+1}_pct"] = round(hits[k] / tested * 100, 1) if tested else 0
-    return {"total": total, "frequency": freq, "recent": list(reversed(results[-30:])), "backtest": bt, "bot_enabled": BOT_ENABLED}
+    ranked = sorted(range(10), key=lambda n: (-counts[n], n))
+    levels = []
+    if total:
+        for n in ranked[:3]:
+            levels.append({"number": n, "count": counts[n], "big_small": "Big" if n >= 5 else "Small"})
+    return {"total": total, "frequency": freq, "recent": list(reversed(results[-30:])), "backtest": bt, "bot_enabled": BOT_ENABLED, "levels": levels}
 
 @app.get("/")
 def home():
